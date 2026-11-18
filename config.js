@@ -1,4 +1,4 @@
 
 
-const SUPABASE_URL = "https://qtgmnieslllkearqijsw.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_X3Z-8ehnOmiD1a8gBChRxg_zOmQwpCd";
+const SUPABASE_URL = "https://ntoizvsjmrmhvxzgylva.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_agFxgP0FufGjRiV2pTOF1Q_lUp7cu68";
