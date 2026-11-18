@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Facility Reservation and Approval System</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
@@ -66,6 +66,7 @@
   .btn-outline:hover{background:rgba(255,255,255,.15);}
   .btn-approve{background:var(--approved); color:#fff;}
   .btn-reject{background:var(--rejected); color:#fff;}
+  .btn-schedule{background:var(--scheduled); color:#fff;}
   .btn-small{padding:5px 10px; font-size:.75rem; margin-right:6px;}
   main{max-width:1100px; margin:0 auto; padding:24px;}
   .card{
@@ -77,16 +78,18 @@
     box-shadow:0 1px 3px rgba(0,0,0,.04);
   }
   .card h2{margin-top:0; font-size:1.05rem; color:var(--primary-dark); border-bottom:1px solid var(--border); padding-bottom:8px;}
+  .card h3{font-size:.95rem; color:var(--primary-dark); margin:20px 0 8px;}
   table{width:100%; border-collapse:collapse; font-size:.85rem;}
   th, td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);}
   th{background:#eef3f4; font-weight:600;}
   .status-pill{
-    padding:3px 10px; border-radius:12px; font-size:.72rem; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:.3px;
+    padding:3px 10px; border-radius:12px; font-size:.72rem; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:.3px; white-space:nowrap;
   }
   .pending{background:var(--pending);} .approved{background:var(--approved);}
   .rejected{background:var(--rejected);} .scheduled{background:var(--scheduled);}
   .in_use{background:var(--inuse);} .completed{background:var(--completed);}
   .cancelled{background:var(--cancelled);}
+  .open{background:var(--pending);} .in_progress{background:var(--scheduled);} .resolved{background:var(--completed);}
   form.inline{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:14px;}
   label{display:block; font-size:.75rem; font-weight:600; margin-bottom:3px; color:#555;}
   input, select, textarea{
@@ -107,6 +110,10 @@
   .toolbar button.tab.active{background:var(--primary); color:#fff;}
   .empty{color:#888; font-style:italic; padding:10px 0;}
   .audit-entry{border-left:3px solid var(--primary); padding:6px 10px; margin-bottom:6px; background:#f9fbfc; font-size:.8rem;}
+  .stat-grid{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:10px;}
+  .stat{flex:1 1 110px; background:#eef3f4; border-radius:8px; padding:12px; text-align:center;}
+  .stat .num{font-size:1.5rem; font-weight:700; color:var(--primary-dark);}
+  .stat .lbl{font-size:.72rem; text-transform:uppercase; letter-spacing:.3px; color:#666;}
   .footer-note{text-align:center; font-size:.75rem; color:#999; margin-top:30px;}
 </style>
 </head>
@@ -155,7 +162,7 @@
   <main>
     <div class="toolbar" id="nav-tabs"></div>
 
-    <!-- Requester: Facilities & Submit Reservation -->
+    <!-- Requester -->
     <section id="view-facilities" class="card hidden">
       <h2>Facilities</h2>
       <div id="facilities-table"></div>
@@ -170,15 +177,15 @@
         </div>
         <div>
           <label>Purpose</label>
-          <input id="res-purpose" type="text" required placeholder="e.g. Org meeting" />
+          <input id="res-purpose" type="text" required placeholder="e.g. Org meeting" >
         </div>
         <div>
           <label>Start</label>
-          <input id="res-start" type="datetime-local" required />
+          <input id="res-start" type="datetime-local" required >
         </div>
         <div>
           <label>End</label>
-          <input id="res-end" type="datetime-local" required />
+          <input id="res-end" type="datetime-local" required >
         </div>
         <button class="btn-primary" type="submit">Submit</button>
       </form>
@@ -186,34 +193,54 @@
     </section>
 
     <section id="view-my-reservations" class="card hidden">
-      <h2>My Reservations</h2>
+      <h2>My Reservations (Status &amp; History)</h2>
       <div id="my-reservations-table"></div>
     </section>
 
-    <!-- Admin: Approval Queue -->
+    <!-- Admin -->
     <section id="view-approval" class="card hidden">
       <h2>Reservation Approval Queue (Administrator)</h2>
       <div id="approval-table"></div>
     </section>
 
-    <!-- Admin: Manage Facilities -->
     <section id="view-manage-facilities" class="card hidden">
       <h2>Manage Facilities (Administrator)</h2>
       <form class="inline" onsubmit="addFacility(event)">
-        <div><label>Name</label><input id="fac-name" required /></div>
-        <div><label>Location</label><input id="fac-location" /></div>
-        <div><label>Capacity</label><input id="fac-capacity" type="number" /></div>
+        <div><label>Name</label><input id="fac-name" required ></div>
+        <div><label>Location</label><input id="fac-location" ></div>
+        <div><label>Capacity</label><input id="fac-capacity" type="number" ></div>
         <button class="btn-primary" type="submit">Add Facility</button>
       </form>
       <div id="manage-facilities-table"></div>
     </section>
 
-    <!-- Staff: Confirm / Complete -->
+    <section id="view-users" class="card hidden">
+      <h2>Manage Users (Administrator)</h2>
+      <div id="users-table"></div>
+    </section>
+
+    <section id="view-reports" class="card hidden">
+      <h2>Reports (Administrator)</h2>
+      <div id="reports-body"></div>
+    </section>
+
+    <section id="view-audit" class="card hidden">
+      <h2>Audit Logs (Administrator)</h2>
+      <div id="audit-table"></div>
+    </section>
+
+    <!-- Staff -->
     <section id="view-staff-ops" class="card hidden">
-      <h2>Facility Operations (Facility Staff)</h2>
+      <h2>Reservations &amp; Facility Usage (Facility Staff)</h2>
       <div id="staff-ops-table"></div>
     </section>
 
+    <section id="view-facility-condition" class="card hidden">
+      <h2>Update Facility Condition (Facility Staff)</h2>
+      <div id="facility-condition-table"></div>
+    </section>
+
+    <!-- Admin + Staff -->
     <section id="view-service-requests" class="card hidden">
       <h2>Service Requests / Facility Concerns</h2>
       <form class="inline" onsubmit="submitServiceRequest(event)">
@@ -230,12 +257,6 @@
       <div id="service-requests-table"></div>
     </section>
 
-    <!-- Admin: Audit Log -->
-    <section id="view-audit" class="card hidden">
-      <h2>Audit Logs (Administrator)</h2>
-      <div id="audit-table"></div>
-    </section>
-
     <div class="footer-note">Systems Analysis and Design — Laboratory 4, Section B — Role-Based Facility Reservation and Approval System</div>
   </main>
 </div>
@@ -244,10 +265,8 @@
 /* =====================================================================
    Supabase client
    SUPABASE_URL and SUPABASE_ANON_KEY come from config.js (loaded above).
-   Edit config.js, NOT this file, to connect your own project.
 ===================================================================== */
 if (SUPABASE_URL.includes("YOUR-PROJECT-REF")) {
-  document.getElementById('login-msg') && (document.getElementById('login-msg').textContent = '');
   window.addEventListener('DOMContentLoaded', () => {
     const msg = document.getElementById('login-msg');
     if (msg){
@@ -261,6 +280,8 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentProfile = null;   // { id, full_name, email, role }
 let facilitiesCache = [];
+
+const RES_STATUSES = ['pending','approved','rejected','scheduled','in_use','completed','cancelled'];
 
 /* ------------------------- AUTH ------------------------- */
 async function handleLogin(){
@@ -282,15 +303,15 @@ async function handleRegister(){
   const password = document.getElementById('reg-password').value;
   const msg = document.getElementById('reg-msg');
 
-  const { data, error } = await sb.auth.signUp({ email, password });
+  // The database trigger creates the profile (role = requester) automatically
+  const { data, error } = await sb.auth.signUp({
+    email, password, options: { data: { full_name } }
+  });
   if (error){ msg.textContent = error.message; msg.className = "msg error"; return; }
 
-  // Create matching profile row with default role = requester
-  const userId = data.user?.id;
-  if (userId){
-    await sb.from('profiles').insert({ id: userId, full_name, email, role: 'requester' });
-  }
-  msg.textContent = "Registered! Please check your email to confirm, then log in.";
+  msg.textContent = data.session
+    ? "Registered! You can now log in."
+    : "Registered! Please check your email to confirm, then log in.";
   msg.className = "msg ok";
 }
 
@@ -305,23 +326,26 @@ async function loadProfileAndBoot(){
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return;
 
-  let { data: profile, error } = await sb.from('profiles').select('*').eq('id', user.id).single();
-  if (error || !profile){
-    // fallback: create a profile if one doesn't exist yet
-    const insertRes = await sb.from('profiles')
-      .insert({ id: user.id, full_name: user.email, email: user.email, role: 'requester' })
-      .select().single();
-    profile = insertRes.data;
+  const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
+
+  if (!profile){
+    await sb.auth.signOut();
+    const msg = document.getElementById('login-msg');
+    msg.textContent = 'No profile found for this account. Ask the administrator.';
+    msg.className = 'msg error';
+    document.getElementById('app-view').classList.add('hidden');
+    document.getElementById('login-view').classList.remove('hidden');
+    return;
   }
 
   currentProfile = profile;
   document.getElementById('login-view').classList.add('hidden');
   document.getElementById('app-view').classList.remove('hidden');
   document.getElementById('user-name').textContent = profile.full_name || profile.email;
-  document.getElementById('user-role').textContent = profile.role;
+  document.getElementById('user-role').textContent = profile.role === 'staff' ? 'Facility Staff' : profile.role;
 
-  buildNav();
   await loadFacilities();
+  buildNav();
 }
 
 /* ------------------------- NAVIGATION ------------------------- */
@@ -332,14 +356,16 @@ const NAV_BY_ROLE = {
     { id:'view-my-reservations', label:'My Reservations' },
   ],
   staff: [
-    { id:'view-staff-ops', label:'Facility Operations' },
-    { id:'view-facilities', label:'Facilities' },
+    { id:'view-staff-ops', label:'Reservations & Usage' },
+    { id:'view-facility-condition', label:'Facility Condition' },
     { id:'view-service-requests', label:'Service Requests' },
   ],
   admin: [
     { id:'view-approval', label:'Approval Queue' },
     { id:'view-manage-facilities', label:'Manage Facilities' },
+    { id:'view-users', label:'Manage Users' },
     { id:'view-service-requests', label:'Service Requests' },
+    { id:'view-reports', label:'Reports' },
     { id:'view-audit', label:'Audit Logs' },
   ],
 };
@@ -355,10 +381,11 @@ function buildNav(){
     b.onclick = () => showTab(t.id, b);
     nav.appendChild(b);
   });
-  tabs.forEach((t, i) => {
-    document.getElementById(t.id).classList.toggle('hidden', i !== 0);
-  });
-  if (tabs.length) refreshView(tabs[0].id);
+  document.querySelectorAll('main section.card').forEach(s => s.classList.add('hidden'));
+  if (tabs.length){
+    document.getElementById(tabs[0].id).classList.remove('hidden');
+    refreshView(tabs[0].id);
+  }
 }
 
 function showTab(id, btnEl){
@@ -369,13 +396,20 @@ function showTab(id, btnEl){
   refreshView(id);
 }
 
-function refreshView(id){
+async function refreshView(id){
+  if (id === 'view-facilities' || id === 'view-submit' || id === 'view-manage-facilities' ||
+      id === 'view-facility-condition' || id === 'view-service-requests') {
+    await loadFacilities();
+  }
   if (id === 'view-facilities') renderFacilities();
   if (id === 'view-submit') populateFacilitySelect();
   if (id === 'view-my-reservations') loadMyReservations();
   if (id === 'view-approval') loadApprovalQueue();
   if (id === 'view-manage-facilities') renderManageFacilities();
+  if (id === 'view-users') loadUsers();
+  if (id === 'view-reports') loadReports();
   if (id === 'view-staff-ops') loadStaffOps();
+  if (id === 'view-facility-condition') renderFacilityCondition();
   if (id === 'view-service-requests') { populateServiceFacilitySelect(); loadServiceRequests(); }
   if (id === 'view-audit') loadAuditLogs();
 }
@@ -386,14 +420,26 @@ async function loadFacilities(){
   facilitiesCache = data || [];
 }
 
+function facPill(status){
+  const cls = status==='active' ? 'approved' : (status==='maintenance' ? 'pending' : 'cancelled');
+  return `<span class="status-pill ${cls}">${status}</span>`;
+}
+
+function statusSelect(f){
+  return `<select onchange="updateFacilityStatus('${f.id}', this.value)">
+    <option value="active" ${f.status==='active'?'selected':''}>Active</option>
+    <option value="maintenance" ${f.status==='maintenance'?'selected':''}>Maintenance</option>
+    <option value="inactive" ${f.status==='inactive'?'selected':''}>Inactive</option>
+  </select>`;
+}
+
 function renderFacilities(){
   const el = document.getElementById('facilities-table');
   if (!facilitiesCache.length){ el.innerHTML = '<div class="empty">No facilities found.</div>'; return; }
   el.innerHTML = `<table><tr><th>Name</th><th>Location</th><th>Capacity</th><th>Status</th></tr>` +
     facilitiesCache.map(f => `<tr>
       <td>${escapeHtml(f.name)}</td><td>${escapeHtml(f.location||'-')}</td>
-      <td>${f.capacity||'-'}</td>
-      <td><span class="status-pill ${f.status==='active'?'approved':(f.status==='maintenance'?'pending':'cancelled')}">${f.status}</span></td>
+      <td>${f.capacity||'-'}</td><td>${facPill(f.status)}</td>
     </tr>`).join('') + `</table>`;
 }
 
@@ -416,17 +462,23 @@ async function addFacility(ev){
 
 function renderManageFacilities(){
   const el = document.getElementById('manage-facilities-table');
+  if (!facilitiesCache.length){ el.innerHTML = '<div class="empty">No facilities found.</div>'; return; }
   el.innerHTML = `<table><tr><th>Name</th><th>Location</th><th>Capacity</th><th>Status</th><th>Change Status</th></tr>` +
     facilitiesCache.map(f => `<tr>
       <td>${escapeHtml(f.name)}</td><td>${escapeHtml(f.location||'-')}</td><td>${f.capacity||'-'}</td>
-      <td><span class="status-pill ${f.status==='active'?'approved':(f.status==='maintenance'?'pending':'cancelled')}">${f.status}</span></td>
-      <td>
-        <select onchange="updateFacilityStatus('${f.id}', this.value)">
-          <option value="active" ${f.status==='active'?'selected':''}>Active</option>
-          <option value="maintenance" ${f.status==='maintenance'?'selected':''}>Maintenance</option>
-          <option value="inactive" ${f.status==='inactive'?'selected':''}>Inactive</option>
-        </select>
-      </td>
+      <td>${facPill(f.status)}</td>
+      <td>${statusSelect(f)}</td>
+    </tr>`).join('') + `</table>`;
+}
+
+function renderFacilityCondition(){
+  const el = document.getElementById('facility-condition-table');
+  if (!facilitiesCache.length){ el.innerHTML = '<div class="empty">No facilities found.</div>'; return; }
+  el.innerHTML = `<table><tr><th>Name</th><th>Location</th><th>Capacity</th><th>Condition</th><th>Update Condition</th></tr>` +
+    facilitiesCache.map(f => `<tr>
+      <td>${escapeHtml(f.name)}</td><td>${escapeHtml(f.location||'-')}</td><td>${f.capacity||'-'}</td>
+      <td>${facPill(f.status)}</td>
+      <td>${statusSelect(f)}</td>
     </tr>`).join('') + `</table>`;
 }
 
@@ -434,6 +486,8 @@ async function updateFacilityStatus(id, status){
   const { error } = await sb.from('facilities').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) alert(error.message);
   await loadFacilities();
+  renderManageFacilities();
+  renderFacilityCondition();
 }
 
 /* ------------------------- RESERVATIONS (Requester) ------------------------- */
@@ -469,11 +523,12 @@ async function loadMyReservations(){
   const el = document.getElementById('my-reservations-table');
   if (!data || !data.length){ el.innerHTML = '<div class="empty">No reservations yet.</div>'; return; }
 
-  el.innerHTML = `<table><tr><th>Facility</th><th>Purpose</th><th>Start</th><th>End</th><th>Status</th><th>Action</th></tr>` +
+  el.innerHTML = `<table><tr><th>Facility</th><th>Purpose</th><th>Start</th><th>End</th><th>Status</th><th>Remarks</th><th>Action</th></tr>` +
     data.map(r => `<tr>
       <td>${escapeHtml(r.facilities?.name||'-')}</td><td>${escapeHtml(r.purpose)}</td>
       <td>${fmt(r.start_time)}</td><td>${fmt(r.end_time)}</td>
       <td><span class="status-pill ${r.status}">${r.status.replace('_',' ')}</span></td>
+      <td>${escapeHtml(r.remarks||'-')}</td>
       <td>${r.status==='pending' ? `<button class="btn-small btn-reject" onclick="cancelReservation('${r.id}')">Cancel</button>` : ''}</td>
     </tr>`).join('') + `</table>`;
 }
@@ -493,7 +548,7 @@ async function loadApprovalQueue(){
     .order('created_at', { ascending:true });
 
   const el = document.getElementById('approval-table');
-  if (!data || !data.length){ el.innerHTML = '<div class="empty">No reservations awaiting review.</div>'; return; }
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">No reservations awaiting review or scheduling.</div>'; return; }
 
   el.innerHTML = `<table><tr><th>Requester</th><th>Facility</th><th>Purpose</th><th>Start</th><th>End</th><th>Status</th><th>Action</th></tr>` +
     data.map(r => `<tr>
@@ -502,22 +557,31 @@ async function loadApprovalQueue(){
       <td>${escapeHtml(r.purpose)}</td>
       <td>${fmt(r.start_time)}</td><td>${fmt(r.end_time)}</td>
       <td><span class="status-pill ${r.status}">${r.status}</span></td>
-      <td>${r.status==='pending' ? `
-        <button class="btn-small btn-approve" onclick="reviewReservation('${r.id}','approved')">Approve</button>
-        <button class="btn-small btn-reject" onclick="reviewReservation('${r.id}','rejected')">Reject</button>` : '—'}
+      <td>
+        ${r.status==='pending' ? `
+          <button class="btn-small btn-approve" onclick="reviewReservation('${r.id}','approved')">Approve</button>
+          <button class="btn-small btn-reject" onclick="reviewReservation('${r.id}','rejected')">Reject</button>` : ''}
+        ${r.status==='approved' ? `
+          <button class="btn-small btn-schedule" onclick="reviewReservation('${r.id}','scheduled')">Schedule</button>` : ''}
       </td>
     </tr>`).join('') + `</table>`;
 }
 
 async function reviewReservation(id, decision){
-  // BR-B4-04: only Administrator may approve/reject (also enforced by RLS)
-  const nextStatus = decision === 'approved' ? 'scheduled' : 'rejected';
-  const { error } = await sb.from('reservations').update({
-    status: nextStatus,
-    reviewed_by: currentProfile.id,
-    reviewed_at: new Date().toISOString()
-  }).eq('id', id);
+  // BR-B4-04: only Administrator may approve/reject (also enforced by RLS + trigger)
+  // Flow: Pending -> Approved / Rejected ; Approved -> Scheduled
+  let patch;
+  if (decision === 'approved'){
+    patch = { status:'approved', reviewed_by: currentProfile.id, reviewed_at: new Date().toISOString() };
+  } else if (decision === 'rejected'){
+    const remarks = prompt('Reason for rejection (optional):');
+    if (remarks === null) return;
+    patch = { status:'rejected', remarks: remarks.trim() || null, reviewed_by: currentProfile.id, reviewed_at: new Date().toISOString() };
+  } else if (decision === 'scheduled'){
+    patch = { status:'scheduled' };
+  } else return;
 
+  const { error } = await sb.from('reservations').update(patch).eq('id', id);
   if (error) alert('Action blocked: ' + error.message);   // e.g. overlap conflict from trigger
   loadApprovalQueue();
 }
@@ -525,21 +589,22 @@ async function reviewReservation(id, decision){
 /* ------------------------- STAFF OPERATIONS ------------------------- */
 async function loadStaffOps(){
   const { data, error } = await sb.from('reservations')
-    .select('*, facilities(name)')
-    .in('status', ['scheduled','in_use'])
-    .order('start_time', { ascending:true });
+    .select('*, facilities(name), profiles!reservations_requester_id_fkey(full_name)')
+    .order('start_time', { ascending:false })
+    .limit(100);
 
   const el = document.getElementById('staff-ops-table');
-  if (!data || !data.length){ el.innerHTML = '<div class="empty">No scheduled reservations.</div>'; return; }
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">No reservations.</div>'; return; }
 
-  el.innerHTML = `<table><tr><th>Facility</th><th>Purpose</th><th>Start</th><th>End</th><th>Status</th><th>Action</th></tr>` +
+  el.innerHTML = `<table><tr><th>Requester</th><th>Facility</th><th>Purpose</th><th>Start</th><th>End</th><th>Status</th><th>Action</th></tr>` +
     data.map(r => `<tr>
+      <td>${escapeHtml(r.profiles?.full_name||'-')}</td>
       <td>${escapeHtml(r.facilities?.name||'-')}</td><td>${escapeHtml(r.purpose)}</td>
       <td>${fmt(r.start_time)}</td><td>${fmt(r.end_time)}</td>
       <td><span class="status-pill ${r.status}">${r.status.replace('_',' ')}</span></td>
       <td>
-        ${r.status==='scheduled' ? `<button class="btn-small btn-primary" onclick="setReservationStatus('${r.id}','in_use')">Mark In Use</button>` : ''}
-        ${r.status==='in_use' ? `<button class="btn-small btn-approve" onclick="setReservationStatus('${r.id}','completed')">Mark Completed</button>` : ''}
+        ${r.status==='scheduled' ? `<button class="btn-small btn-primary" onclick="setReservationStatus('${r.id}','in_use')">Confirm Usage</button>` : ''}
+        ${r.status==='in_use' ? `<button class="btn-small btn-approve" onclick="setReservationStatus('${r.id}','completed')">Record Completion</button>` : ''}
       </td>
     </tr>`).join('') + `</table>`;
 }
@@ -565,23 +630,122 @@ async function submitServiceRequest(ev){
 }
 
 async function loadServiceRequests(){
-  const { data } = await sb.from('service_requests').select('*, facilities(name)').order('created_at',{ascending:false});
+  const { data } = await sb.from('service_requests')
+    .select('*, facilities(name), profiles!service_requests_raised_by_fkey(full_name)')
+    .order('created_at',{ascending:false});
   const el = document.getElementById('service-requests-table');
   if (!data || !data.length){ el.innerHTML = '<div class="empty">No service requests.</div>'; return; }
-  el.innerHTML = `<table><tr><th>Facility</th><th>Concern</th><th>Status</th><th>Reported</th></tr>` +
-    data.map(s => `<tr><td>${escapeHtml(s.facilities?.name||'-')}</td><td>${escapeHtml(s.concern)}</td><td>${s.status}</td><td>${fmt(s.created_at)}</td></tr>`).join('') + `</table>`;
+  const isAdmin = currentProfile.role === 'admin';
+  el.innerHTML = `<table><tr><th>Facility</th><th>Concern</th><th>Raised By</th><th>Status</th><th>Reported</th></tr>` +
+    data.map(s => `<tr>
+      <td>${escapeHtml(s.facilities?.name||'-')}</td>
+      <td>${escapeHtml(s.concern)}</td>
+      <td>${escapeHtml(s.profiles?.full_name||'-')}</td>
+      <td>${isAdmin ? `<select onchange="updateServiceStatus('${s.id}', this.value)">
+          <option value="open" ${s.status==='open'?'selected':''}>Open</option>
+          <option value="in_progress" ${s.status==='in_progress'?'selected':''}>In progress</option>
+          <option value="resolved" ${s.status==='resolved'?'selected':''}>Resolved</option>
+        </select>` : `<span class="status-pill ${s.status}">${s.status.replace('_',' ')}</span>`}</td>
+      <td>${fmt(s.created_at)}</td>
+    </tr>`).join('') + `</table>`;
+}
+
+async function updateServiceStatus(id, status){
+  const { error } = await sb.from('service_requests').update({ status }).eq('id', id);
+  if (error) alert(error.message);
+  loadServiceRequests();
+}
+
+/* ------------------------- MANAGE USERS (Admin) ------------------------- */
+async function loadUsers(){
+  const { data, error } = await sb.from('profiles').select('*').order('role').order('full_name');
+  const el = document.getElementById('users-table');
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">No users found.</div>'; return; }
+  el.innerHTML = `<table><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th></tr>` +
+    data.map(u => `<tr>
+      <td>${escapeHtml(u.full_name)}</td>
+      <td>${escapeHtml(u.email)}</td>
+      <td>
+        <select onchange="updateUserRole('${u.id}', this.value)" ${u.id===currentProfile.id?'disabled title="You cannot change your own role"':''}>
+          <option value="admin" ${u.role==='admin'?'selected':''}>Administrator</option>
+          <option value="staff" ${u.role==='staff'?'selected':''}>Facility Staff</option>
+          <option value="requester" ${u.role==='requester'?'selected':''}>Requester</option>
+        </select>
+      </td>
+      <td>${fmt(u.created_at)}</td>
+    </tr>`).join('') + `</table>`;
+}
+
+async function updateUserRole(id, role){
+  const { error } = await sb.from('profiles').update({ role }).eq('id', id);
+  if (error) alert(error.message);
+  loadUsers();
+}
+
+/* ------------------------- REPORTS (Admin) ------------------------- */
+async function loadReports(){
+  const [resRes, srRes] = await Promise.all([
+    sb.from('reservations').select('status, facility_id, facilities(name)'),
+    sb.from('service_requests').select('status')
+  ]);
+  const res = resRes.data || [];
+  const sr = srRes.data || [];
+  const el = document.getElementById('reports-body');
+
+  const byStatus = {};
+  RES_STATUSES.forEach(s => byStatus[s] = 0);
+  res.forEach(r => byStatus[r.status] = (byStatus[r.status] || 0) + 1);
+
+  const byFacility = {};
+  res.forEach(r => {
+    const n = r.facilities?.name || 'Unknown';
+    byFacility[n] = byFacility[n] || { total:0, approved:0, completed:0, rejected:0 };
+    byFacility[n].total++;
+    if (['approved','scheduled','in_use'].includes(r.status)) byFacility[n].approved++;
+    if (r.status === 'completed') byFacility[n].completed++;
+    if (r.status === 'rejected') byFacility[n].rejected++;
+  });
+
+  const srOpen = sr.filter(s => s.status !== 'resolved').length;
+
+  el.innerHTML = `
+    <h3>Reservations by Status (Total: ${res.length})</h3>
+    <div class="stat-grid">
+      ${RES_STATUSES.map(s => `<div class="stat"><div class="num">${byStatus[s]}</div><div class="lbl">${s.replace('_',' ')}</div></div>`).join('')}
+    </div>
+    <h3>Reservations by Facility</h3>
+    ${Object.keys(byFacility).length ? `<table><tr><th>Facility</th><th>Total</th><th>Approved / Active</th><th>Completed</th><th>Rejected</th></tr>` +
+      Object.entries(byFacility).map(([n,v]) => `<tr><td>${escapeHtml(n)}</td><td>${v.total}</td><td>${v.approved}</td><td>${v.completed}</td><td>${v.rejected}</td></tr>`).join('') + `</table>`
+      : '<div class="empty">No reservation data yet.</div>'}
+    <h3>Service Concerns</h3>
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${sr.length}</div><div class="lbl">Total</div></div>
+      <div class="stat"><div class="num">${srOpen}</div><div class="lbl">Unresolved</div></div>
+      <div class="stat"><div class="num">${sr.length - srOpen}</div><div class="lbl">Resolved</div></div>
+    </div>`;
 }
 
 /* ------------------------- AUDIT LOGS (Admin) ------------------------- */
 async function loadAuditLogs(){
-  const { data, error } = await sb.from('audit_logs').select('*').order('created_at', { ascending:false }).limit(100);
+  const { data, error } = await sb.from('audit_logs')
+    .select('*, profiles!audit_logs_actor_id_fkey(full_name)')
+    .order('created_at', { ascending:false })
+    .limit(100);
   const el = document.getElementById('audit-table');
   if (!data || !data.length){ el.innerHTML = '<div class="empty">No audit entries yet.</div>'; return; }
-  el.innerHTML = data.map(a => `
+  el.innerHTML = data.map(a => {
+    let change = '';
+    const o = a.details?.old_status, n = a.details?.new_status;
+    if (o && n){
+      const from = o.status ?? o.role, to = n.status ?? n.role;
+      if (from !== undefined && to !== undefined) change = ` &mdash; ${escapeHtml(String(from))} &rarr; ${escapeHtml(String(to))}`;
+    }
+    return `
     <div class="audit-entry">
-      <strong>${escapeHtml(a.action)}</strong> — ${escapeHtml(a.entity_type)} (${a.entity_id ? a.entity_id.slice(0,8) : '-'})
-      <div style="color:#888;">${fmt(a.created_at)}</div>
-    </div>`).join('');
+      <strong>${escapeHtml(a.action)}</strong> — ${escapeHtml(a.entity_type)} (${a.entity_id ? a.entity_id.slice(0,8) : '-'})${change}
+      <div style="color:#888;">${escapeHtml(a.profiles?.full_name || 'System')} • ${fmt(a.created_at)}</div>
+    </div>`;
+  }).join('');
 }
 
 /* ------------------------- HELPERS ------------------------- */
