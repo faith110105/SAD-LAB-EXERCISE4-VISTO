@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Facility Reservation and Approval System</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+  :root{
+    --primary:#1e5f74;
+    --primary-dark:#133b46;
+    --accent:#f2a541;
+    --bg:#f4f7f8;
+    --card:#ffffff;
+    --border:#dfe6e9;
+    --pending:#f2a541;
+    --approved:#2e8b57;
+    --rejected:#c0392b;
+    --scheduled:#2f80ed;
+    --inuse:#8e44ad;
+    --completed:#27ae60;
+    --cancelled:#7f8c8d;
+    --text:#233;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Segoe UI', Roboto, Arial, sans-serif;
+    background:var(--bg);
+    color:var(--text);
+  }
+  header{
+    background:linear-gradient(90deg, var(--primary-dark), var(--primary));
+    color:#fff;
+    padding:16px 24px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  header h1{margin:0; font-size:1.15rem;}
+  header .sub{font-size:.8rem; opacity:.85;}
+  #userbar{display:flex; align-items:center; gap:12px; font-size:.9rem;}
+  .badge{
+    background:var(--accent);
+    color:#3a2a00;
+    padding:2px 10px;
+    border-radius:12px;
+    font-size:.75rem;
+    font-weight:600;
+    text-transform:capitalize;
+  }
+  button{
+    cursor:pointer;
+    border:none;
+    border-radius:6px;
+    padding:8px 14px;
+    font-size:.85rem;
+    font-weight:600;
+    transition:.15s;
+  }
+  .btn-primary{background:var(--primary); color:#fff;}
+  .btn-primary:hover{background:var(--primary-dark);}
+  .btn-outline{background:transparent; border:1px solid #fff; color:#fff;}
+  .btn-outline:hover{background:rgba(255,255,255,.15);}
+  .btn-approve{background:var(--approved); color:#fff;}
+  .btn-reject{background:var(--rejected); color:#fff;}
+  .btn-schedule{background:var(--scheduled); color:#fff;}
+  .btn-small{padding:5px 10px; font-size:.75rem; margin-right:6px;}
+  main{max-width:1100px; margin:0 auto; padding:24px;}
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:20px;
+    margin-bottom:20px;
+    box-shadow:0 1px 3px rgba(0,0,0,.04);
+  }
+  .card h2{margin-top:0; font-size:1.05rem; color:var(--primary-dark); border-bottom:1px solid var(--border); padding-bottom:8px;}
+  .card h3{font-size:.95rem; color:var(--primary-dark); margin:20px 0 8px;}
+  table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  th, td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);}
+  th{background:#eef3f4; font-weight:600;}
+  .status-pill{
+    padding:3px 10px; border-radius:12px; font-size:.72rem; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:.3px; white-space:nowrap;
+  }
+  .pending{background:var(--pending);} .approved{background:var(--approved);}
+  .rejected{background:var(--rejected);} .scheduled{background:var(--scheduled);}
+  .in_use{background:var(--inuse);} .completed{background:var(--completed);}
+  .cancelled{background:var(--cancelled);}
+  .open{background:var(--pending);} .in_progress{background:var(--scheduled);} .resolved{background:var(--completed);}
+  form.inline{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:14px;}
+  label{display:block; font-size:.75rem; font-weight:600; margin-bottom:3px; color:#555;}
+  input, select, textarea{
+    padding:7px 9px; border:1px solid var(--border); border-radius:6px; font-size:.85rem; font-family:inherit;
+  }
+  #login-view{
+    max-width:380px; margin:80px auto; background:var(--card); padding:30px; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,.08);
+  }
+  #login-view h2{text-align:center; color:var(--primary-dark);}
+  #login-view input{width:100%; margin-bottom:12px;}
+  #login-view button{width:100%;}
+  .msg{font-size:.8rem; margin-top:8px;}
+  .msg.error{color:var(--rejected);}
+  .msg.ok{color:var(--approved);}
+  .hidden{display:none !important;}
+  .toolbar{display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;}
+  .toolbar button.tab{background:#eef3f4; color:var(--primary-dark);}
+  .toolbar button.tab.active{background:var(--primary); color:#fff;}
+  .empty{color:#888; font-style:italic; padding:10px 0;}
+  .audit-entry{border-left:3px solid var(--primary); padding:6px 10px; margin-bottom:6px; background:#f9fbfc; font-size:.8rem;}
+  .stat-grid{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:10px;}
+  .stat{flex:1 1 110px; background:#eef3f4; border-radius:8px; padding:12px; text-align:center;}
+  .stat .num{font-size:1.5rem; font-weight:700; color:var(--primary-dark);}
+  .stat .lbl{font-size:.72rem; text-transform:uppercase; letter-spacing:.3px; color:#666;}
+  .footer-note{text-align:center; font-size:.75rem; color:#999; margin-top:30px;}
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN VIEW ===================== -->
+<div id="login-view">
+  <h2>Facility Reservation System</h2>
+  <p style="font-size:.8rem;color:#777;text-align:center;margin-top:-8px;">Sign in to continue</p>
+  <label>Email</label>
+  <input id="login-email" type="email" placeholder="you@school.edu.ph" />
+  <label>Password</label>
+  <input id="login-password" type="password" placeholder="••••••••" />
+  <button class="btn-primary" onclick="handleLogin()">Log In</button>
+  <div id="login-msg" class="msg"></div>
+  <hr style="margin:18px 0;border:none;border-top:1px solid var(--border);">
+  <details>
+    <summary style="cursor:pointer;font-size:.8rem;color:var(--primary);">First time? Register as Requester</summary>
+    <div style="margin-top:10px;">
+      <label>Full Name</label>
+      <input id="reg-name" type="text" />
+      <label>Email</label>
+      <input id="reg-email" type="email" />
+      <label>Password</label>
+      <input id="reg-password" type="password" />
+      <button class="btn-primary" onclick="handleRegister()">Register</button>
+      <div id="reg-msg" class="msg"></div>
+    </div>
+  </details>
+</div>
+
+<!-- ===================== APP VIEW ===================== -->
+<div id="app-view" class="hidden">
+  <header>
+    <div>
+      <h1>Facility Reservation &amp; Approval System</h1>
+      <div class="sub">Role-Based Workflow • Lab 4 - Section B</div>
+    </div>
+    <div id="userbar">
+      <span id="user-name"></span>
+      <span id="user-role" class="badge"></span>
+      <button class="btn-outline" onclick="handleLogout()">Log Out</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="toolbar" id="nav-tabs"></div>
+
+    <!-- Requester -->
+    <section id="view-facilities" class="card hidden">
+      <h2>Facilities</h2>
+      <div id="facilities-table"></div>
+    </section>
+
+    <section id="view-submit" class="card hidden">
+      <h2>Submit Reservation Request</h2>
+      <form class="inline" onsubmit="submitReservation(event)">
+        <div>
+          <label>Facility</label>
+          <select id="res-facility"></select>
+        </div>
+        <div>
+          <label>Purpose</label>
+          <input id="res-purpose" type="text" required placeholder="e.g. Org meeting" >
+        </div>
+        <div>
+          <label>Start</label>
+          <input id="res-start" type="datetime-local" required >
+        </div>
+        <div>
+          <label>End</label>
+          <input id="res-end" type="datetime-local" required >
+        </div>
+        <button class="btn-primary" type="submit">Submit</button>
+      </form>
+      <div id="submit-msg" class="msg"></div>
+    </section>
+
+    <section id="view-my-reservations" class="card hidden">
+      <h2>My Reservations (Status &amp; History)</h2>
+      <div id="my-reservations-table"></div>
+    </section>
+
+    <!-- Admin -->
+    <section id="view-approval" class="card hidden">
+      <h2>Reservation Approval Queue (Administrator)</h2>
+      <div id="approval-table"></div>
+    </section>
+
+    <section id="view-manage-facilities" class="card hidden">
+      <h2>Manage Facilities (Administrator)</h2>
+      <form class="inline" onsubmit="addFacility(event)">
+        <div><label>Name</label><input id="fac-name" required ></div>
+        <div><label>Location</label><input id="fac-location" ></div>
+        <div><label>Capacity</label><input id="fac-capacity" type="number" ></div>
+        <button class="btn-primary" type="submit">Add Facility</button>
+      </form>
+      <div id="manage-facilities-table"></div>
+    </section>
+
+    <section id="view-users" class="card hidden">
+      <h2>Manage Users (Administrator)</h2>
+      <div id="users-table"></div>
+    </section>
+
+    <section id="view-reports" class="card hidden">
+      <h2>Reports (Administrator)</h2>
+      <div id="reports-body"></div>
+    </section>
+
+    <section id="view-audit" class="card hidden">
+      <h2>Audit Logs (Administrator)</h2>
+      <div id="audit-table"></div>
+    </section>
+
+    <!-- Staff -->
+    <section id="view-staff-ops" class="card hidden">
+      <h2>Reservations &amp; Facility Usage (Facility Staff)</h2>
+      <div id="staff-ops-table"></div>
+    </section>
+
+    <section id="view-facility-condition" class="card hidden">
+      <h2>Update Facility Condition (Facility Staff)</h2>
+      <div id="facility-condition-table"></div>
+    </section>
+
+    <!-- Admin + Staff -->
+    <section id="view-service-requests" class="card hidden">
+      <h2>Service Requests / Facility Concerns</h2>
+      <form class="inline" onsubmit="submitServiceRequest(event)">
+        <div>
+          <label>Facility</label>
+          <select id="sr-facility"></select>
+        </div>
+        <div>
+          <label>Concern</label>
+          <input id="sr-concern" type="text" required style="width:280px;" />
+        </div>
+        <button class="btn-primary" type="submit">Report</button>
+      </form>
+      <div id="service-requests-table"></div>
+    </section>
+
+    <div class="footer-note">Systems Analysis and Design — Laboratory 4, Section B — Role-Based Facility Reservation and Approval System</div>
+  </main>
+</div>
+
+<script>
+/* =====================================================================
+   Supabase client
+   SUPABASE_URL and SUPABASE_ANON_KEY come from config.js (loaded above).
+===================================================================== */
+if (SUPABASE_URL.includes("YOUR-PROJECT-REF")) {
+  window.addEventListener('DOMContentLoaded', () => {
+    const msg = document.getElementById('login-msg');
+    if (msg){
+      msg.textContent = 'Not yet connected: edit config.js with your Supabase URL and anon key.';
+      msg.className = 'msg error';
+    }
+  });
+}
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentProfile = null;   // { id, full_name, email, role }
+let facilitiesCache = [];
+
+const RES_STATUSES = ['pending','approved','rejected','scheduled','in_use','completed','cancelled'];
+
+/* ------------------------- AUTH ------------------------- */
+async function handleLogin(){
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const msg = document.getElementById('login-msg');
+  msg.textContent = "Signing in...";
+  msg.className = "msg";
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error){ msg.textContent = error.message; msg.className = "msg error"; return; }
+
+  await loadProfileAndBoot();
+}
+
+async function handleRegister(){
+  const full_name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-password').value;
+  const msg = document.getElementById('reg-msg');
+
+  // The database trigger creates the profile (role = requester) automatically
+  const { data, error } = await sb.auth.signUp({
+    email, password, options: { data: { full_name } }
+  });
+  if (error){ msg.textContent = error.message; msg.className = "msg error"; return; }
+
+  msg.textContent = data.session
+    ? "Registered! You can now log in."
+    : "Registered! Please check your email to confirm, then log in.";
+  msg.className = "msg ok";
+}
+
+async function handleLogout(){
+  await sb.auth.signOut();
+  currentProfile = null;
+  document.getElementById('app-view').classList.add('hidden');
+  document.getElementById('login-view').classList.remove('hidden');
+}
+
+async function loadProfileAndBoot(){
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return;
+
+  const { data: profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
+
+  if (!profile){
+    await sb.auth.signOut();
+    const msg = document.getElementById('login-msg');
+    msg.textContent = 'No profile found for this account. Ask the administrator.';
+    msg.className = 'msg error';
+    document.getElementById('app-view').classList.add('hidden');
+    document.getElementById('login-view').classList.remove('hidden');
+    return;
+  }
+
+  currentProfile = profile;
+  document.getElementById('login-view').classList.add('hidden');
+  document.getElementById('app-view').classList.remove('hidden');
+  document.getElementById('user-name').textContent = profile.full_name || profile.email;
+  document.getElementById('user-role').textContent = profile.role === 'staff' ? 'Facility Staff' : profile.role;
+
+  await loadFacilities();
+  buildNav();
+}
+
+/* ------------------------- NAVIGATION ------------------------- */
+const NAV_BY_ROLE = {
+  requester: [
+    { id:'view-facilities', label:'Facilities' },
+    { id:'view-submit', label:'Submit Reservation' },
+    { id:'view-my-reservations', label:'My Reservations' },
+  ],
+  staff: [
+    { id:'view-staff-ops', label:'Reservations & Usage' },
+    { id:'view-facility-condition', label:'Facility Condition' },
+    { id:'view-service-requests', label:'Service Requests' },
+  ],
+  admin: [
+    { id:'view-approval', label:'Approval Queue' },
+    { id:'view-manage-facilities', label:'Manage Facilities' },
+    { id:'view-users', label:'Manage Users' },
+    { id:'view-service-requests', label:'Service Requests' },
+    { id:'view-reports', label:'Reports' },
+    { id:'view-audit', label:'Audit Logs' },
+  ],
+};
+
+function buildNav(){
+  const tabs = NAV_BY_ROLE[currentProfile.role] || [];
+  const nav = document.getElementById('nav-tabs');
+  nav.innerHTML = '';
+  tabs.forEach((t, i) => {
+    const b = document.createElement('button');
+    b.className = 'tab' + (i === 0 ? ' active' : '');
+    b.textContent = t.label;
+    b.onclick = () => showTab(t.id, b);
+    nav.appendChild(b);
+  });
+  document.querySelectorAll('main section.card').forEach(s => s.classList.add('hidden'));
+  if (tabs.length){
+    document.getElementById(tabs[0].id).classList.remove('hidden');
+    refreshView(tabs[0].id);
+  }
+}
+
+function showTab(id, btnEl){
+  document.querySelectorAll('#nav-tabs .tab').forEach(b => b.classList.remove('active'));
+  btnEl.classList.add('active');
+  document.querySelectorAll('main section.card').forEach(s => s.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+  refreshView(id);
+}
+
+async function refreshView(id){
+  if (id === 'view-facilities' || id === 'view-submit' || id === 'view-manage-facilities' ||
+      id === 'view-facility-condition' || id === 'view-service-requests') {
+    await loadFacilities();
+  }
+  if (id === 'view-facilities') renderFacilities();
+  if (id === 'view-submit') populateFacilitySelect();
+  if (id === 'view-my-reservations') loadMyReservations();
+  if (id === 'view-approval') loadApprovalQueue();
+  if (id === 'view-manage-facilities') renderManageFacilities();
+  if (id === 'view-users') loadUsers();
+  if (id === 'view-reports') loadReports();
+  if (id === 'view-staff-ops') loadStaffOps();
+  if (id === 'view-facility-condition') renderFacilityCondition();
+  if (id === 'view-service-requests') { populateServiceFacilitySelect(); loadServiceRequests(); }
+  if (id === 'view-audit') loadAuditLogs();
+}
+
+/* ------------------------- FACILITIES ------------------------- */
+async function loadFacilities(){
+  const { data, error } = await sb.from('facilities').select('*').order('name');
+  facilitiesCache = data || [];
+}
+
+function facPill(status){
+  const cls = status==='active' ? 'approved' : (status==='maintenance' ? 'pending' : 'cancelled');
+  return `<span class="status-pill ${cls}">${status}</span>`;
+}
+
+function statusSelect(f){
+  return `<select onchange="updateFacilityStatus('${f.id}', this.value)">
+    <option value="active" ${f.status==='active'?'selected':''}>Active</option>
+    <option value="maintenance" ${f.status==='maintenance'?'selected':''}>Maintenance</option>
+    <option value="inactive" ${f.status==='inactive'?'selected':''}>Inactive</option>
+  </select>`;
+}
+
+function renderFacilities(){
+  const el = document.getElementById('facilities-table');
+  if (!facilitiesCache.length){ el.innerHTML = '<div class="empty">No facilities found.</div>'; return; }
+  el.innerHTML = `<table><tr><th>Name</th><th>Location</th><th>Capacity</th><th>Status</th></tr>` +
+    facilitiesCache.map(f => `<tr>
+      <td>${escapeHtml(f.name)}</td><td>${escapeHtml(f.location||'-')}</td>
+      <td>${f.capacity||'-'}</td><td>${facPill(f.status)}</td>
+    </tr>`).join('') + `</table>`;
+}
+
+function populateFacilitySelect(){
+  const sel = document.getElementById('res-facility');
+  sel.innerHTML = facilitiesCache
+    .filter(f => f.status === 'active')   // BR-B4-01 / BR-B4-08
+    .map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
+}
+
+async function addFacility(ev){
+  ev.preventDefault();
+  const name = document.getElementById('fac-name').value.trim();
+  const location = document.getElementById('fac-location').value.trim();
+  const capacity = parseInt(document.getElementById('fac-capacity').value) || null;
+  const { error } = await sb.from('facilities').insert({ name, location, capacity, status:'active', created_by: currentProfile.id });
+  if (!error){ ev.target.reset(); await loadFacilities(); renderManageFacilities(); }
+  else alert(error.message);
+}
+
+function renderManageFacilities(){
+  const el = document.getElementById('manage-facilities-table');
+  if (!facilitiesCache.length){ el.innerHTML = '<div class="empty">No facilities found.</div>'; return; }
+  el.innerHTML = `<table><tr><th>Name</th><th>Location</th><th>Capacity</th><th>Status</th><th>Change Status</th></tr>` +
+    facilitiesCache.map(f => `<tr>
+      <td>${escapeHtml(f.name)}</td><td>${escapeHtml(f.location||'-')}</td><td>${f.capacity||'-'}</td>
+      <td>${facPill(f.status)}</td>
+      <td>${statusSelect(f)}</td>
+    </tr>`).join('') + `</table>`;
+}
+
+function renderFacilityCondition(){
+  const el = document.getElementById('facility-condition-table');
+  if (!facilitiesCache.length){ el.innerHTML = '<div class="empty">No facilities found.</div>'; return; }
+  el.innerHTML = `<table><tr><th>Name</th><th>Location</th><th>Capacity</th><th>Condition</th><th>Update Condition</th></tr>` +
+    facilitiesCache.map(f => `<tr>
+      <td>${escapeHtml(f.name)}</td><td>${escapeHtml(f.location||'-')}</td><td>${f.capacity||'-'}</td>
+      <td>${facPill(f.status)}</td>
+      <td>${statusSelect(f)}</td>
+    </tr>`).join('') + `</table>`;
+}
+
+async function updateFacilityStatus(id, status){
+  const { error } = await sb.from('facilities').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) alert(error.message);
+  await loadFacilities();
+  renderManageFacilities();
+  renderFacilityCondition();
+}
+
+/* ------------------------- RESERVATIONS (Requester) ------------------------- */
+async function submitReservation(ev){
+  ev.preventDefault();
+  const facility_id = document.getElementById('res-facility').value;
+  const purpose = document.getElementById('res-purpose').value.trim();
+  const start_time = document.getElementById('res-start').value;
+  const end_time = document.getElementById('res-end').value;
+  const msg = document.getElementById('submit-msg');
+
+  if (new Date(start_time) >= new Date(end_time)){   // BR-B4-02
+    msg.textContent = 'Start time must be before end time.'; msg.className = 'msg error'; return;
+  }
+
+  const { error } = await sb.from('reservations').insert({
+    facility_id, requester_id: currentProfile.id, purpose,
+    start_time: new Date(start_time).toISOString(),
+    end_time: new Date(end_time).toISOString(),
+    status: 'pending'
+  });
+
+  if (error){ msg.textContent = error.message; msg.className = 'msg error'; }
+  else { msg.textContent = 'Reservation submitted as Pending.'; msg.className = 'msg ok'; ev.target.reset(); }
+}
+
+async function loadMyReservations(){
+  const { data, error } = await sb.from('reservations')
+    .select('*, facilities(name)')
+    .eq('requester_id', currentProfile.id)
+    .order('created_at', { ascending:false });
+
+  const el = document.getElementById('my-reservations-table');
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">No reservations yet.</div>'; return; }
+
+  el.innerHTML = `<table><tr><th>Facility</th><th>Purpose</th><th>Start</th><th>End</th><th>Status</th><th>Remarks</th><th>Action</th></tr>` +
+    data.map(r => `<tr>
+      <td>${escapeHtml(r.facilities?.name||'-')}</td><td>${escapeHtml(r.purpose)}</td>
+      <td>${fmt(r.start_time)}</td><td>${fmt(r.end_time)}</td>
+      <td><span class="status-pill ${r.status}">${r.status.replace('_',' ')}</span></td>
+      <td>${escapeHtml(r.remarks||'-')}</td>
+      <td>${r.status==='pending' ? `<button class="btn-small btn-reject" onclick="cancelReservation('${r.id}')">Cancel</button>` : ''}</td>
+    </tr>`).join('') + `</table>`;
+}
+
+async function cancelReservation(id){
+  // BR-B4-09: requester may modify only own Pending requests
+  const { error } = await sb.from('reservations').update({ status:'cancelled' }).eq('id', id).eq('status','pending');
+  if (error) alert(error.message);
+  loadMyReservations();
+}
+
+/* ------------------------- APPROVAL QUEUE (Admin) ------------------------- */
+async function loadApprovalQueue(){
+  const { data, error } = await sb.from('reservations')
+    .select('*, facilities(name), profiles!reservations_requester_id_fkey(full_name)')
+    .in('status', ['pending','approved'])
+    .order('created_at', { ascending:true });
+
+  const el = document.getElementById('approval-table');
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">No reservations awaiting review or scheduling.</div>'; return; }
+
+  el.innerHTML = `<table><tr><th>Requester</th><th>Facility</th><th>Purpose</th><th>Start</th><th>End</th><th>Status</th><th>Action</th></tr>` +
+    data.map(r => `<tr>
+      <td>${escapeHtml(r.profiles?.full_name||'-')}</td>
+      <td>${escapeHtml(r.facilities?.name||'-')}</td>
+      <td>${escapeHtml(r.purpose)}</td>
+      <td>${fmt(r.start_time)}</td><td>${fmt(r.end_time)}</td>
+      <td><span class="status-pill ${r.status}">${r.status}</span></td>
+      <td>
+        ${r.status==='pending' ? `
+          <button class="btn-small btn-approve" onclick="reviewReservation('${r.id}','approved')">Approve</button>
+          <button class="btn-small btn-reject" onclick="reviewReservation('${r.id}','rejected')">Reject</button>` : ''}
+        ${r.status==='approved' ? `
+          <button class="btn-small btn-schedule" onclick="reviewReservation('${r.id}','scheduled')">Schedule</button>` : ''}
+      </td>
+    </tr>`).join('') + `</table>`;
+}
+
+async function reviewReservation(id, decision){
+  // BR-B4-04: only Administrator may approve/reject (also enforced by RLS + trigger)
+  // Flow: Pending -> Approved / Rejected ; Approved -> Scheduled
+  let patch;
+  if (decision === 'approved'){
+    patch = { status:'approved', reviewed_by: currentProfile.id, reviewed_at: new Date().toISOString() };
+  } else if (decision === 'rejected'){
+    const remarks = prompt('Reason for rejection (optional):');
+    if (remarks === null) return;
+    patch = { status:'rejected', remarks: remarks.trim() || null, reviewed_by: currentProfile.id, reviewed_at: new Date().toISOString() };
+  } else if (decision === 'scheduled'){
+    patch = { status:'scheduled' };
+  } else return;
+
+  const { error } = await sb.from('reservations').update(patch).eq('id', id);
+  if (error) alert('Action blocked: ' + error.message);   // e.g. overlap conflict from trigger
+  loadApprovalQueue();
+}
+
+/* ------------------------- STAFF OPERATIONS ------------------------- */
+async function loadStaffOps(){
+  const { data, error } = await sb.from('reservations')
+    .select('*, facilities(name), profiles!reservations_requester_id_fkey(full_name)')
+    .order('start_time', { ascending:false })
+    .limit(100);
+
+  const el = document.getElementById('staff-ops-table');
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">No reservations.</div>'; return; }
+
+  el.innerHTML = `<table><tr><th>Requester</th><th>Facility</th><th>Purpose</th><th>Start</th><th>End</th><th>Status</th><th>Action</th></tr>` +
+    data.map(r => `<tr>
+      <td>${escapeHtml(r.profiles?.full_name||'-')}</td>
+      <td>${escapeHtml(r.facilities?.name||'-')}</td><td>${escapeHtml(r.purpose)}</td>
+      <td>${fmt(r.start_time)}</td><td>${fmt(r.end_time)}</td>
+      <td><span class="status-pill ${r.status}">${r.status.replace('_',' ')}</span></td>
+      <td>
+        ${r.status==='scheduled' ? `<button class="btn-small btn-primary" onclick="setReservationStatus('${r.id}','in_use')">Confirm Usage</button>` : ''}
+        ${r.status==='in_use' ? `<button class="btn-small btn-approve" onclick="setReservationStatus('${r.id}','completed')">Record Completion</button>` : ''}
+      </td>
+    </tr>`).join('') + `</table>`;
+}
+
+async function setReservationStatus(id, status){
+  const { error } = await sb.from('reservations').update({ status }).eq('id', id);
+  if (error) alert(error.message);
+  loadStaffOps();
+}
+
+/* ------------------------- SERVICE REQUESTS ------------------------- */
+function populateServiceFacilitySelect(){
+  document.getElementById('sr-facility').innerHTML = facilitiesCache
+    .map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
+}
+
+async function submitServiceRequest(ev){
+  ev.preventDefault();
+  const facility_id = document.getElementById('sr-facility').value;
+  const concern = document.getElementById('sr-concern').value.trim();
+  const { error } = await sb.from('service_requests').insert({ facility_id, raised_by: currentProfile.id, concern });
+  if (!error){ ev.target.reset(); loadServiceRequests(); } else alert(error.message);
+}
+
+async function loadServiceRequests(){
+  const { data } = await sb.from('service_requests')
+    .select('*, facilities(name), profiles!service_requests_raised_by_fkey(full_name)')
+    .order('created_at',{ascending:false});
+  const el = document.getElementById('service-requests-table');
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">No service requests.</div>'; return; }
+  const isAdmin = currentProfile.role === 'admin';
+  el.innerHTML = `<table><tr><th>Facility</th><th>Concern</th><th>Raised By</th><th>Status</th><th>Reported</th></tr>` +
+    data.map(s => `<tr>
+      <td>${escapeHtml(s.facilities?.name||'-')}</td>
+      <td>${escapeHtml(s.concern)}</td>
+      <td>${escapeHtml(s.profiles?.full_name||'-')}</td>
+      <td>${isAdmin ? `<select onchange="updateServiceStatus('${s.id}', this.value)">
+          <option value="open" ${s.status==='open'?'selected':''}>Open</option>
+          <option value="in_progress" ${s.status==='in_progress'?'selected':''}>In progress</option>
+          <option value="resolved" ${s.status==='resolved'?'selected':''}>Resolved</option>
+        </select>` : `<span class="status-pill ${s.status}">${s.status.replace('_',' ')}</span>`}</td>
+      <td>${fmt(s.created_at)}</td>
+    </tr>`).join('') + `</table>`;
+}
+
+async function updateServiceStatus(id, status){
+  const { error } = await sb.from('service_requests').update({ status }).eq('id', id);
+  if (error) alert(error.message);
+  loadServiceRequests();
+}
+
+/* ------------------------- MANAGE USERS (Admin) ------------------------- */
+async function loadUsers(){
+  const { data, error } = await sb.from('profiles').select('*').order('role').order('full_name');
+  const el = document.getElementById('users-table');
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">No users found.</div>'; return; }
+  el.innerHTML = `<table><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th></tr>` +
+    data.map(u => `<tr>
+      <td>${escapeHtml(u.full_name)}</td>
+      <td>${escapeHtml(u.email)}</td>
+      <td>
+        <select onchange="updateUserRole('${u.id}', this.value)" ${u.id===currentProfile.id?'disabled title="You cannot change your own role"':''}>
+          <option value="admin" ${u.role==='admin'?'selected':''}>Administrator</option>
+          <option value="staff" ${u.role==='staff'?'selected':''}>Facility Staff</option>
+          <option value="requester" ${u.role==='requester'?'selected':''}>Requester</option>
+        </select>
+      </td>
+      <td>${fmt(u.created_at)}</td>
+    </tr>`).join('') + `</table>`;
+}
+
+async function updateUserRole(id, role){
+  const { error } = await sb.from('profiles').update({ role }).eq('id', id);
+  if (error) alert(error.message);
+  loadUsers();
+}
+
+/* ------------------------- REPORTS (Admin) ------------------------- */
+async function loadReports(){
+  const [resRes, srRes] = await Promise.all([
+    sb.from('reservations').select('status, facility_id, facilities(name)'),
+    sb.from('service_requests').select('status')
+  ]);
+  const res = resRes.data || [];
+  const sr = srRes.data || [];
+  const el = document.getElementById('reports-body');
+
+  const byStatus = {};
+  RES_STATUSES.forEach(s => byStatus[s] = 0);
+  res.forEach(r => byStatus[r.status] = (byStatus[r.status] || 0) + 1);
+
+  const byFacility = {};
+  res.forEach(r => {
+    const n = r.facilities?.name || 'Unknown';
+    byFacility[n] = byFacility[n] || { total:0, approved:0, completed:0, rejected:0 };
+    byFacility[n].total++;
+    if (['approved','scheduled','in_use'].includes(r.status)) byFacility[n].approved++;
+    if (r.status === 'completed') byFacility[n].completed++;
+    if (r.status === 'rejected') byFacility[n].rejected++;
+  });
+
+  const srOpen = sr.filter(s => s.status !== 'resolved').length;
+
+  el.innerHTML = `
+    <h3>Reservations by Status (Total: ${res.length})</h3>
+    <div class="stat-grid">
+      ${RES_STATUSES.map(s => `<div class="stat"><div class="num">${byStatus[s]}</div><div class="lbl">${s.replace('_',' ')}</div></div>`).join('')}
+    </div>
+    <h3>Reservations by Facility</h3>
+    ${Object.keys(byFacility).length ? `<table><tr><th>Facility</th><th>Total</th><th>Approved / Active</th><th>Completed</th><th>Rejected</th></tr>` +
+      Object.entries(byFacility).map(([n,v]) => `<tr><td>${escapeHtml(n)}</td><td>${v.total}</td><td>${v.approved}</td><td>${v.completed}</td><td>${v.rejected}</td></tr>`).join('') + `</table>`
+      : '<div class="empty">No reservation data yet.</div>'}
+    <h3>Service Concerns</h3>
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${sr.length}</div><div class="lbl">Total</div></div>
+      <div class="stat"><div class="num">${srOpen}</div><div class="lbl">Unresolved</div></div>
+      <div class="stat"><div class="num">${sr.length - srOpen}</div><div class="lbl">Resolved</div></div>
+    </div>`;
+}
+
+/* ------------------------- AUDIT LOGS (Admin) ------------------------- */
+async function loadAuditLogs(){
+  const { data, error } = await sb.from('audit_logs')
+    .select('*, profiles!audit_logs_actor_id_fkey(full_name)')
+    .order('created_at', { ascending:false })
+    .limit(100);
+  const el = document.getElementById('audit-table');
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">No audit entries yet.</div>'; return; }
+  el.innerHTML = data.map(a => {
+    let change = '';
+    const o = a.details?.old_status, n = a.details?.new_status;
+    if (o && n){
+      const from = o.status ?? o.role, to = n.status ?? n.role;
+      if (from !== undefined && to !== undefined) change = ` &mdash; ${escapeHtml(String(from))} &rarr; ${escapeHtml(String(to))}`;
+    }
+    return `
+    <div class="audit-entry">
+      <strong>${escapeHtml(a.action)}</strong> — ${escapeHtml(a.entity_type)} (${a.entity_id ? a.entity_id.slice(0,8) : '-'})${change}
+      <div style="color:#888;">${escapeHtml(a.profiles?.full_name || 'System')} • ${fmt(a.created_at)}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ------------------------- HELPERS ------------------------- */
+function fmt(ts){ if(!ts) return '-'; const d = new Date(ts); return d.toLocaleString('en-PH', { dateStyle:'medium', timeStyle:'short' }); }
+function escapeHtml(str){ return String(str??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ------------------------- BOOTSTRAP ------------------------- */
+(async function init(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) await loadProfileAndBoot();
+})();
+</script>
+</body>
+</html>
